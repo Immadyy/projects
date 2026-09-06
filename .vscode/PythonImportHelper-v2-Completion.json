@@ -1,0 +1,45 @@
+[
+    {
+        "label": "FastAPI",
+        "importPath": "fastapi",
+        "description": "fastapi",
+        "isExtraImport": true,
+        "detail": "fastapi",
+        "documentation": {}
+    },
+    {
+        "label": "async_playwright",
+        "importPath": "playwright.async_api",
+        "description": "playwright.async_api",
+        "isExtraImport": true,
+        "detail": "playwright.async_api",
+        "documentation": {}
+    },
+    {
+        "label": "uvicorn",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "uvicorn",
+        "description": "uvicorn",
+        "detail": "uvicorn",
+        "documentation": {}
+    },
+    {
+        "label": "QuoteItem",
+        "kind": 6,
+        "importPath": "scraper-pipeline.main",
+        "description": "scraper-pipeline.main",
+        "peekOfCode": "class QuoteItem(BaseModel):\n    quote: str\n    by: str\n    tags: List[str]\napp = FastAPI()\n@app.get(\"/api/quotes\")\nasync def get_quotes():\n    # We are going to launch the browser headlessly this time\n    # so it doesn't pop up a window on the server.\n    async with async_playwright() as p:",
+        "detail": "scraper-pipeline.main",
+        "documentation": {}
+    },
+    {
+        "label": "app",
+        "kind": 5,
+        "importPath": "scraper-pipeline.main",
+        "description": "scraper-pipeline.main",
+        "peekOfCode": "app = FastAPI()\n@app.get(\"/api/quotes\")\nasync def get_quotes():\n    # We are going to launch the browser headlessly this time\n    # so it doesn't pop up a window on the server.\n    async with async_playwright() as p:\n        browser = await p.chromium.launch(headless=True)\n        page = await browser.new_page()\n        quotes = []\n        page_count = 0",
+        "detail": "scraper-pipeline.main",
+        "documentation": {}
+    }
+]
