@@ -40,17 +40,34 @@ async def create_scrape_job(
     pool: asyncpg.Pool,
     target_url: str,
     pages_requested: int,
-) -> int:
+) -> tuple[int | None, int | None]:
     async with pool.acquire() as connection:
-        return await connection.fetchval(
-            """
-            INSERT INTO scrape_jobs (status, target_url, pages_requested)
-            VALUES ('pending', $1, $2)
-            RETURNING id
-            """,
-            target_url,
-            pages_requested,
-        )
+        async with connection.transaction():
+            await connection.execute("SELECT pg_advisory_xact_lock(874321)")
+            active_job_id = await connection.fetchval(
+                """
+                SELECT id
+                FROM scrape_jobs
+                WHERE status IN ('pending', 'running')
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            )
+
+            if active_job_id is not None:
+                return None, active_job_id
+
+            job_id = await connection.fetchval(
+                """
+                INSERT INTO scrape_jobs (status, target_url, pages_requested)
+                VALUES ('pending', $1, $2)
+                RETURNING id
+                """,
+                target_url,
+                pages_requested,
+            )
+
+    return job_id, None
 
 
 async def update_scrape_job(
@@ -100,19 +117,6 @@ async def fetch_scrape_job(pool: asyncpg.Pool, job_id: int) -> dict | None:
         )
 
     return dict(row) if row else None
-
-
-async def fetch_active_scrape_job(pool: asyncpg.Pool) -> int | None:
-    async with pool.acquire() as connection:
-        return await connection.fetchval(
-            """
-            SELECT id
-            FROM scrape_jobs
-            WHERE status IN ('pending', 'running')
-            ORDER BY id DESC
-            LIMIT 1
-            """
-        )
 
 
 async def database_is_ready(pool: asyncpg.Pool) -> bool:

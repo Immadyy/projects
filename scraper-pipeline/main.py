@@ -9,7 +9,6 @@ from database import (
     create_db_pool,
     create_scrape_job,
     database_is_ready,
-    fetch_active_scrape_job,
     fetch_quotes,
     fetch_scrape_job,
 )
@@ -63,19 +62,19 @@ async def trigger_scrape(
     if api_key is None or not hmac.compare_digest(api_key, SCRAPE_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid API key.")
 
-    active_job_id = await fetch_active_scrape_job(app.state.db_pool)
+    pages = request.pages or SCRAPE_PAGES
+    job_id, active_job_id = await create_scrape_job(
+        app.state.db_pool,
+        str(request.target_url),
+        pages,
+    )
     if active_job_id is not None:
         raise HTTPException(
             status_code=409,
             detail=f"A scrape job is already running: {active_job_id}",
         )
-
-    pages = request.pages or SCRAPE_PAGES
-    job_id = await create_scrape_job(
-        app.state.db_pool,
-        str(request.target_url),
-        pages,
-    )
+    if job_id is None:
+        raise HTTPException(status_code=500, detail="Could not create scrape job.")
 
     background_tasks.add_task(
         run_scraper_task,

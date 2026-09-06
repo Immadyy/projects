@@ -34,21 +34,21 @@ async def run_scraper_task(
 
                 quote_cards = page.locator(card_selector)
 
-                for index in range(await quote_cards.count()):
-                    quote_card = quote_cards.nth(index)
-                    content = {
-                        "quote": await quote_card.locator(quote_selector).inner_text(),
-                        "by": await quote_card.locator(author_selector).inner_text(),
-                        "tags": await quote_card.locator(tags_selector).all_inner_texts(),
-                    }
+                async with db_pool.acquire() as connection:
+                    for index in range(await quote_cards.count()):
+                        quote_card = quote_cards.nth(index)
+                        content = {
+                            "quote": await quote_card.locator(quote_selector).inner_text(),
+                            "by": await quote_card.locator(author_selector).inner_text(),
+                            "tags": await quote_card.locator(tags_selector).all_inner_texts(),
+                        }
 
-                    try:
-                        quote_item = QuoteItem.model_validate(content)
-                    except ValidationError as error:
-                        print(f"Invalid quote: {error.errors()}")
-                        continue
+                        try:
+                            quote_item = QuoteItem.model_validate(content)
+                        except ValidationError as error:
+                            print(f"Invalid quote: {error.errors()}")
+                            continue
 
-                    async with db_pool.acquire() as connection:
                         inserted_id = await connection.fetchval(
                             """
                             INSERT INTO quotes (quote, author, tags)
@@ -61,8 +61,8 @@ async def run_scraper_task(
                             quote_item.tags,
                         )
 
-                    if inserted_id is not None:
-                        items_inserted += 1
+                        if inserted_id is not None:
+                            items_inserted += 1
 
                 pages_completed += 1
                 await update_scrape_job(
