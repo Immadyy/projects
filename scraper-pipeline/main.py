@@ -1,9 +1,19 @@
 from contextlib import asynccontextmanager
-from fastapi import BackgroundTasks, FastAPI, Query
+import hmac
+
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query
 import uvicorn
 
-from config import DATABASE_URL, HOST, PORT, SCRAPE_PAGES
-from database import create_db_pool, fetch_quotes
+from config import DATABASE_URL, HOST, PORT, SCRAPE_API_KEY, SCRAPE_PAGES
+from database import (
+    create_db_pool,
+    create_scrape_job,
+    database_is_ready,
+    fetch_active_scrape_job,
+    fetch_quotes,
+    fetch_scrape_job,
+)
+from models import ScrapeRequest
 from scraper import run_scraper_task
 
 @asynccontextmanager
@@ -13,6 +23,12 @@ async def lifespan(app: FastAPI):
     await app.state.db_pool.close()
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+async def health_check():
+    await database_is_ready(app.state.db_pool)
+    return {"status": "ok"}
 
 
 @app.get("/api/quotes")
@@ -33,17 +49,59 @@ async def get_quotes(
 
 
 @app.post("/api/scrape/quotes", status_code=202)
-async def trigger_scrape(background_tasks: BackgroundTasks):
+async def trigger_scrape(
+    request: ScrapeRequest,
+    background_tasks: BackgroundTasks,
+    api_key: str | None = Header(default=None, alias="X-API-Key"),
+):
+    if not SCRAPE_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Scraping is not configured with an API key.",
+        )
+
+    if api_key is None or not hmac.compare_digest(api_key, SCRAPE_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid API key.")
+
+    active_job_id = await fetch_active_scrape_job(app.state.db_pool)
+    if active_job_id is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A scrape job is already running: {active_job_id}",
+        )
+
+    pages = request.pages or SCRAPE_PAGES
+    job_id = await create_scrape_job(
+        app.state.db_pool,
+        str(request.target_url),
+        pages,
+    )
+
     background_tasks.add_task(
         run_scraper_task,
         app.state.db_pool,
-        SCRAPE_PAGES,
+        job_id,
+        str(request.target_url),
+        pages,
+        request.card_selector,
+        request.quote_selector,
+        request.author_selector,
+        request.tags_selector,
     )
 
     return {
         "status": "processing",
-        "message": "Scraper initialized in the background.",
+        "job_id": job_id,
+        "status_url": f"/api/scrape/jobs/{job_id}",
     }
+
+
+@app.get("/api/scrape/jobs/{job_id}")
+async def get_scrape_job(job_id: int):
+    job = await fetch_scrape_job(app.state.db_pool, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Scrape job not found.")
+    return job
 
 if __name__ == "__main__":
     uvicorn.run(
