@@ -10,7 +10,7 @@ class QuoteItem(BaseModel):
 
 
 class ScrapeRequest(BaseModel):
-    target_url: AnyHttpUrl = "https://quotes.toscrape.com/js/"
+    target_url: AnyHttpUrl = AnyHttpUrl("https://quotes.toscrape.com/js/")
     pages: int | None = Field(default=None, ge=1, le=100)
     card_selector: str = Field(default=".quote", min_length=1, max_length=200)
     quote_selector: str = Field(default=".text", min_length=1, max_length=200)
