@@ -1,4 +1,5 @@
 import asyncpg
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from playwright.async_api import async_playwright
 from pydantic import ValidationError
 
@@ -30,7 +31,12 @@ async def run_scraper_task(
             for page_number in range(1, page_limit + 1):
                 page_url = f"{target_url.rstrip('/')}/page/{page_number}"
                 await page.goto(page_url, wait_until="domcontentloaded")
-                await page.wait_for_selector(card_selector)
+
+                try:
+                    await page.wait_for_selector(card_selector, timeout=5000)
+                except PlaywrightTimeoutError:
+                    print(f"No cards found on page {page_number}; stopping pagination.")
+                    break
 
                 quote_cards = page.locator(card_selector)
 
